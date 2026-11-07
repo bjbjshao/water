@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0a0d12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="打水">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<title>打水</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:#0a0d12;color:#fff;
+    font-family:-apple-system,"PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;
+    overscroll-behavior:none;user-select:none}
+  main{height:100%;display:flex;flex-direction:column;
+    padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 10px);gap:10px}
+  a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    border-radius:26px;text-decoration:none;color:#fff;overflow:hidden;transition:transform .08s ease}
+  a:active{transform:scale(.978)}
+  .cold{background:linear-gradient(160deg,#2b7bff,#0b3f9e 70%)}
+  .hot{background:linear-gradient(160deg,#ff7a45,#c2260d 70%)}
+  .ico{font-size:58px;line-height:1;opacity:.9;margin-bottom:4px}
+  b{font-size:68px;line-height:1.1;letter-spacing:6px;font-weight:700}
+  i{font-style:normal;font-size:14px;opacity:.72;margin-top:8px;letter-spacing:1px}
+  footer{display:flex;align-items:center;justify-content:space-between;padding:2px 6px}
+  #last{font-size:12px;color:#7d8794}
+  button{font:inherit;color:#8fb6ff;background:#16202e;border:0;border-radius:12px;
+    padding:8px 16px;font-size:13px}
+  #panel{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;
+    justify-content:center;padding:18px;z-index:9}
+  #panel[hidden]{display:none}
+  .card{width:100%;max-width:420px;background:#121a26;border-radius:22px;padding:20px}
+  .card h2{font-size:17px;margin-bottom:14px}
+  .nums{display:flex;gap:8px;text-align:center;margin-bottom:14px}
+  .nums>div{flex:1;background:#0d1420;border-radius:14px;padding:12px 4px}
+  .nums b{display:block;font-size:26px;letter-spacing:0}
+  .nums i{margin:0;font-size:11px}
+  #recent{list-style:none;font-size:12px;color:#9aa6b5;max-height:180px;overflow:auto;margin-bottom:14px}
+  #recent li{padding:5px 2px;border-bottom:1px solid #1b2534}
+  .btns{display:flex;gap:8px}
+  .btns button{flex:1}
+  #clr{color:#ff8f7d}
+</style>
+</head>
+<body>
+<main>
+  <!-- 冷热接反了：把两个 data-sn 对调即可 -->
+  <a class="cold" data-sn="869451085307507" data-label="冷水" href="#">
+    <span class="ico">❄</span><b>冷水</b><i>点一下 · 唤起支付宝</i>
+  </a>
+  <a class="hot" data-sn="869451087375478" data-label="热水" href="#">
+    <span class="ico">♨</span><b>热水</b><i>点一下 · 唤起支付宝</i>
+  </a>
+  <footer>
+    <span id="last">还没记录</span>
+    <button id="openStats">统计</button>
+  </footer>
+  <p style="font-size:11px;color:#5c6672;text-align:center">若停在支付宝首页，返回再点一次</p>
+</main>
+
+<div id="panel" hidden>
+  <div class="card">
+    <h2>出水统计</h2>
+    <div class="nums">
+      <div><b id="n-month">0</b><i>本月</i></div>
+      <div><b id="n-week">0</b><i>近 7 天</i></div>
+      <div><b id="n-cold">0</b><i>冷水</i></div>
+      <div><b id="n-hot">0</b><i>热水</i></div>
+    </div>
+    <ul id="recent"></ul>
+    <div class="btns">
+      <button id="export">导出 CSV</button>
+      <button id="clear">清空</button>
+      <button id="close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var KEY='water_log';
+  var log=[];
+  try{log=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){log=[]}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(log))}catch(e){}}
+  function $(id){return document.getElementById(id)}
+  function fmt(t){var d=new Date(t);return (d.getMonth()+1)+'/'+d.getDate()+' '+
+    ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}
+
+  function renderLast(){
+    var l=log[log.length-1];
+    $('last').textContent = l ? '上次：'+fmt(l.t)+' · '+l.label : '还没记录';
+  }
+
+  function renderStats(){
+    var now=Date.now(), d=new Date();
+    var monthStart=new Date(d.getFullYear(),d.getMonth(),1).getTime();
+    var weekStart=now-7*864e5, m=0,w=0,c=0,h=0;
+    for(var i=0;i<log.length;i++){
+      var r=log[i];
+      if(r.t>=monthStart)m++;
+      if(r.t>=weekStart)w++;
+      if(r.label==='冷水')c++;else h++;
+    }
+    $('n-month').textContent=m; $('n-week').textContent=w;
+    $('n-cold').textContent=c; $('n-hot').textContent=h;
+    var ul=$('recent'); ul.innerHTML='';
+    var tail=log.slice(-10).reverse();
+    for(var j=0;j<tail.length;j++){
+      var li=document.createElement('li');
+      li.textContent=fmt(tail[j].t)+'  ·  '+tail[j].label;
+      ul.appendChild(li);
+    }
+    if(!tail.length)ul.innerHTML='<li>暂无记录</li>';
+  }
+
+  var inAlipay=/AlipayClient/i.test(navigator.userAgent);
+  document.querySelectorAll('a[data-sn]').forEach(function(a){
+    var h5='https://h5.qiekj.com/skip?SN='+a.dataset.sn;
+    a.href=inAlipay?h5:'alipays://platformapi/startapp?appId=20000067&url='+encodeURIComponent(h5);
+    a.addEventListener('click',function(){
+      log.push({t:Date.now(),label:a.dataset.label,sn:a.dataset.sn});
+      if(log.length>2000)log=log.slice(-2000);
+      save(); renderLast();
+    });
+  });
+
+  $('openStats').addEventListener('click',function(){renderStats();$('panel').hidden=false});
+  $('close').addEventListener('click',function(){$('panel').hidden=true});
+  $('clear').addEventListener('click',function(){
+    if(confirm('清空全部出水记录？')){log=[];save();renderStats();renderLast()}
+  });
+  $('export').addEventListener('click',function(){
+    var rows=['time,label,sn'];
+    for(var i=0;i<log.length;i++)rows.push(fmt(log[i].t)+','+log[i].label+','+log[i].sn);
+    var a=document.createElement('a');
+    a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.join('\n'));
+    a.download='water-log.csv'; a.click();
+  });
+
+  renderLast();
+})();
+</script>
+</body>
+</html>
